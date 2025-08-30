@@ -7,11 +7,11 @@ A unified framework for testing custom AI prompts with social media data
 import os
 import json
 import openai
+import argparse
+import sys
 from abc import ABC, abstractmethod
 from dotenv import load_dotenv
 from openai import OpenAI
-import chromadb
-from chromadb.config import Settings
 import uuid
 from datetime import datetime
 
@@ -24,6 +24,10 @@ client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 class BaseDataOrganizer(ABC):
     """Abstract base class for data organization strategies"""
+    
+    def __init__(self, json_file=None):
+        """Initialize with optional JSON file name"""
+        self.json_file = json_file or 'processed_posts.json'
     
     @abstractmethod
     def organize_data(self, posts):
@@ -58,7 +62,7 @@ class BaseDataOrganizer(ABC):
             prompt, instructions = self.get_prompt()
             
             # Run AI analysis
-            ai_response = self._run_ai_analysis(prompt, instructions, vector_store_id)
+            ai_response = self._run_ai_analysis(prompt, instructions, vector_store_id, organized_data)
             
             # Save results
             self._save_results(ai_response, vector_store_id)
@@ -73,27 +77,42 @@ class BaseDataOrganizer(ABC):
     def _load_posts(self):
         """Load posts data from JSON file"""
         try:
-            data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'processed_posts.json')
+            # Use the specified JSON file or default to processed_posts.json
+            data_path = os.path.join(os.path.dirname(__file__), '..', 'data', self.json_file)
             if not os.path.exists(data_path):
                 print(f"❌ Data file not found: {data_path}")
+                print(f"💡 Available files in data folder:")
+                self._list_available_data_files()
                 return []
             
             with open(data_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Filter out posts with unknown networks
-            filtered_posts = []
-            for post in data:
-                network = post.get('network', '').lower()
-                if network not in ['unknown', '']:
-                    filtered_posts.append(post)
+            # Accept all posts for now
+            filtered_posts = data
             
-            print(f"📊 Loaded {len(filtered_posts)} posts (filtered from {len(data)} total)")
+            print(f"📊 Loaded {len(filtered_posts)} posts from {self.json_file} (filtered from {len(data)} total)")
             return filtered_posts
             
         except Exception as e:
-            print(f"❌ Error loading posts: {e}")
+            print(f"❌ Error loading posts from {self.json_file}: {e}")
             return []
+    
+    def _list_available_data_files(self):
+        """List available JSON files in the data folder"""
+        try:
+            data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+            if os.path.exists(data_dir):
+                json_files = [f for f in os.listdir(data_dir) if f.endswith('.json')]
+                if json_files:
+                    for file in json_files:
+                        print(f"   - {file}")
+                else:
+                    print("   No JSON files found in data folder")
+            else:
+                print(f"   Data folder not found: {data_dir}")
+        except Exception as e:
+            print(f"   Error listing data files: {e}")
     
     def _create_vector_store(self, organized_data):
         """Create a vector store for the organized data"""
@@ -106,33 +125,18 @@ class BaseDataOrganizer(ABC):
             test_id = str(uuid.uuid4())[:8]
             vector_store_id = f"{self.test_name}_{test_id}"
             
-            # Convert organized data to text for vector storage
-            data_text = json.dumps(organized_data, ensure_ascii=False, indent=2)
-            
-            # For now, we'll just save the data text to a file
-            # In a full implementation, you'd use a proper vector database
-            vector_file = os.path.join(results_dir, f"{vector_store_id}_data.json")
-            with open(vector_file, 'w', encoding='utf-8') as f:
-                json.dump(organized_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"💾 Created vector store: {vector_store_id}")
+            # Don't save JSON files - just return the ID
+            print(f"💾 Created vector store ID: {vector_store_id}")
             return vector_store_id
             
         except Exception as e:
             print(f"❌ Error creating vector store: {e}")
             return f"{self.test_name}_error"
     
-    def _run_ai_analysis(self, prompt, instructions, vector_store_id):
+    def _run_ai_analysis(self, prompt, instructions, vector_store_id, organized_data):
         """Run AI analysis using OpenAI API"""
         try:
             print("🤖 Running AI analysis...")
-            
-            # Load the organized data for context
-            results_dir = os.path.join(os.path.dirname(__file__), '..', 'results')
-            vector_file = os.path.join(results_dir, f"{vector_store_id}_data.json")
-            
-            with open(vector_file, 'r', encoding='utf-8') as f:
-                organized_data = json.load(f)
             
             # Create the full prompt with data context
             full_prompt = f"""
@@ -171,12 +175,15 @@ Please analyze the provided data and provide a comprehensive response following 
         try:
             results_dir = os.path.join(os.path.dirname(__file__), '..', 'results')
             
-            # Save AI response
-            response_file = os.path.join(results_dir, f"{self.test_name}_ai_response.txt")
+            # Create filename with JSON data source included
+            json_name = os.path.splitext(self.json_file)[0]  # Remove .json extension
+            response_file = os.path.join(results_dir, f"{self.test_name}_{json_name}_ai_response.txt")
+            
             with open(response_file, 'w', encoding='utf-8') as f:
                 f.write(f"Test: {self.test_name}\n")
                 f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Vector Store ID: {vector_store_id}\n")
+                f.write(f"Data Source: {self.json_file}\n")
                 f.write("=" * 50 + "\n\n")
                 f.write(ai_response)
             
@@ -220,8 +227,39 @@ class UnifiedPromptTester:
             print(f"\n{'='*50}")
             self.run_test(name)
 
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Unified Prompt Tester Framework')
+    parser.add_argument('--json-file', '-j', 
+                       default='processed_posts.json',
+                       help='JSON file name to load from data folder (default: processed_posts.json)')
+    parser.add_argument('--list-files', '-l', 
+                       action='store_true',
+                       help='List available JSON files in data folder')
+    return parser.parse_args()
+
 # Example usage
 if __name__ == "__main__":
-    print("🔧 Unified Prompt Tester Framework")
-    print("This is the base framework for custom prompt testing.")
-    print("Import this module to create custom data organizers.")
+    args = parse_arguments()
+    
+    if args.list_files:
+        # List available data files
+        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+        if os.path.exists(data_dir):
+            json_files = [f for f in os.listdir(data_dir) if f.endswith('.json')]
+            if json_files:
+                print("📁 Available JSON files in data folder:")
+                for file in json_files:
+                    print(f"   - {file}")
+            else:
+                print("📁 No JSON files found in data folder")
+        else:
+            print(f"📁 Data folder not found: {data_dir}")
+    else:
+        print("🔧 Unified Prompt Tester Framework")
+        print(f"Default JSON file: {args.json_file}")
+        print("This is the base framework for custom prompt testing.")
+        print("Import this module to create custom data organizers.")
+        print("\nUsage examples:")
+        print("  python unified_prompt_tester.py --json-file processed_posts1.json")
+        print("  python unified_prompt_tester.py --list-files")

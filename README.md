@@ -10,6 +10,53 @@ This framework allows you to create **custom prompts** that:
 - Process data efficiently while keeping vector stores manageable
 - Provide structured AI responses based on your specific requirements
 
+## 📊 Data Structure
+
+### **Cleaned JSON Format**
+
+The framework now works with cleaned and optimized JSON files that contain only essential fields:
+
+#### **processed_posts.json** (Facebook Posts)
+```json
+{
+  "post_time": "2025-08-30T23:21:44.414318+00",
+  "content": "Post text content in Hebrew/English",
+  "social_network": "facebook",
+  "likes_count": 9,
+  "comments_count": 0,
+  "views": 0,
+  "plays": 0,
+  "shares": 0,
+  "saves": 0,
+  "video_url": "",
+  "replies_data": []
+}
+```
+
+#### **processed_posts1.json** (TikTok Posts)
+```json
+{
+  "post_time": "2021-02-16 17:04:13+00",
+  "content": "Post text content in Hebrew/English",
+  "social_network": "tiktok",
+  "likes_count": 48400,
+  "comments_count": 671,
+  "views": 933600,
+  "plays": 933600,
+  "shares": 1280,
+  "saves": 3216,
+  "video_url": "https://www.tiktok.com/@user/video/123456789",
+  "replies_data": []
+}
+```
+
+### **Data Cleaning Results**
+
+- **processed_posts.json**: 200 posts → 132 posts with content (65% size reduction)
+- **processed_posts1.json**: 2025 posts → 384 posts with content (93% size reduction)
+- **Removed**: Verbose metadata, empty content posts, redundant fields
+- **Kept**: Essential engagement stats, post content, timestamps, social network info
+
 ## 🛠️ How to Ask for New Custom Prompts
 
 ### **Method 1: Direct Request**
@@ -115,7 +162,9 @@ class [Name]DataOrganizer(BaseDataOrganizer):
 
 - **Python 3.7+**
 - **OpenAI API Key** (configured in `config.env`)
-- **Social media data** in `data/processed_posts.json`
+- **Social media data** in cleaned JSON format:
+  - `data/processed_posts.json` (Facebook posts)
+  - `data/processed_posts1.json` (TikTok posts)
 - **Base framework** in `base_class/unified_prompt_tester.py`
 
 ## 📊 Data Processing Limits
@@ -143,7 +192,7 @@ Here are some fun custom prompts you could request:
 ### **Common Issues:**
 - **Token Limit Exceeded**: Reduce `max_posts_to_process` in the prompt
 - **API Key Error**: Check `config.env` file exists and contains valid key
-- **File Not Found**: Ensure `data/processed_posts.json` exists
+- **File Not Found**: Ensure cleaned JSON files exist in `data/` folder
 - **Import Errors**: Check Python path and dependencies
 
 ### **Solutions:**
