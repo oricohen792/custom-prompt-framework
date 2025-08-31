@@ -30,7 +30,7 @@ class TikTokFetcher:
         run_input = {
             "excludePinnedPosts": False,
             "proxyCountryCode": "None",
-            "resultsPerPage": 100,
+            "resultsPerPage": max_videos,
             "scrapeRelatedVideos": False,
             "searchQueries": [f"@{username}"],
             "shouldDownloadAvatars": False,
