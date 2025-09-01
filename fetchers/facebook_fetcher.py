@@ -137,8 +137,7 @@ def main():
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Fetch Facebook posts from a specified account')
-    parser.add_argument('username', nargs='?', default='tivoneat', 
-                       help='Facebook username to fetch posts from (default: tivoneat)')
+    parser.add_argument('username', help='Facebook username to fetch posts from')
     parser.add_argument('--max-posts', '-m', type=int, default=50,
                        help='Maximum number of posts to fetch (default: 50)')
     

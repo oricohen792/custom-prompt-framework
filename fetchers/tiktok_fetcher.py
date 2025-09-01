@@ -143,8 +143,7 @@ def main():
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Fetch TikTok videos from a specified account')
-    parser.add_argument('username', nargs='?', default='tivoneat', 
-                       help='TikTok username to fetch videos from (default: tivoneat)')
+    parser.add_argument('username', help='TikTok username to fetch videos from')
     parser.add_argument('--max-videos', '-m', type=int, default=50,
                        help='Maximum number of videos to fetch (default: 50)')
     
