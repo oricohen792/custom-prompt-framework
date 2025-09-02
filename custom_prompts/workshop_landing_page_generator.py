@@ -55,7 +55,8 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
             replies_data = post.get('replies_data', [])
             
             # Check main content and replies for workshop keywords
-            all_text = content + ' ' + ' '.join(replies_data) if replies_data else content
+            reply_texts = [reply.get('comment', '') if isinstance(reply, dict) else str(reply) for reply in replies_data]
+            all_text = content + ' ' + ' '.join(reply_texts) if reply_texts else content
             
             if any(keyword in all_text.lower() for keyword in workshop_keywords):
                 # Truncate content to avoid token limits
@@ -67,10 +68,11 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
                 # Truncate individual replies
                 truncated_replies = []
                 for reply in limited_replies:
-                    if len(reply) > 200:  # Limit reply length
-                        truncated_replies.append(reply[:200] + "...")
+                    reply_text = reply.get('comment', '') if isinstance(reply, dict) else str(reply)
+                    if len(reply_text) > 200:  # Limit reply length
+                        truncated_replies.append(reply_text[:200] + "...")
                     else:
-                        truncated_replies.append(reply)
+                        truncated_replies.append(reply_text)
                 
                 workshop_posts.append({
                     'content': truncated_content,
@@ -90,7 +92,7 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
         
         # Analyze workshop themes
         all_workshop_text = ' '.join([post.get('content', '') for post in workshop_posts])
-        all_replies_text = ' '.join([' '.join(post.get('replies_data', [])) for post in workshop_posts])
+        all_replies_text = ' '.join([' '.join([reply.get('comment', '') if isinstance(reply, dict) else str(reply) for reply in post.get('replies_data', [])]) for post in workshop_posts])
         combined_text = all_workshop_text + ' ' + all_replies_text
         
         workshop_themes = {
@@ -115,7 +117,8 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
         pricing_keywords = ['₪', 'שקל', 'שקלים', 'מחיר', 'מחירים', 'עלות', 'תשלום', 'תשלומים', 'הנחה', 'הנחות']
         pricing_posts = []
         for post in workshop_posts:
-            content = post.get('content', '') + ' ' + ' '.join(post.get('replies_data', []))
+            reply_texts = [reply.get('comment', '') if isinstance(reply, dict) else str(reply) for reply in post.get('replies_data', [])]
+            content = post.get('content', '') + ' ' + ' '.join(reply_texts)
             if any(keyword in content for keyword in pricing_keywords):
                 pricing_posts.append(post)
         
@@ -123,7 +126,8 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
         contact_keywords = ['@', 'טלפון', 'פלאפון', 'מייל', 'אימייל', 'whatsapp', 'ווטסאפ', 'לינק', 'קישור']
         contact_posts = []
         for post in workshop_posts:
-            content = post.get('content', '') + ' ' + ' '.join(post.get('replies_data', []))
+            reply_texts = [reply.get('comment', '') if isinstance(reply, dict) else str(reply) for reply in post.get('replies_data', [])]
+            content = post.get('content', '') + ' ' + ' '.join(reply_texts)
             if any(keyword in content.lower() for keyword in contact_keywords):
                 contact_posts.append(post)
         
@@ -141,13 +145,18 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
         for post in limited_workshop_posts:
             all_images.extend(post.get('images', []))
         
-        # Remove duplicates while preserving order
+        # Remove duplicates while preserving order and sort by likes
         unique_images = []
-        seen = set()
+        seen_urls = set()
         for img in all_images:
-            if img not in seen:
+            img_url = img.get('url', '') if isinstance(img, dict) else str(img)
+            if img_url and img_url not in seen_urls:
                 unique_images.append(img)
-                seen.add(img)
+                seen_urls.add(img_url)
+        
+        # Sort images by likes count (descending) and take top 5
+        unique_images_sorted = sorted(unique_images, key=lambda x: x.get('likes_count', 0), reverse=True)
+        top_5_images = unique_images_sorted[:5]
         
 
         
@@ -158,7 +167,7 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
             "workshop_themes": top_themes,
             "pricing_posts": pricing_posts[:10],  # Limit pricing posts
             "contact_posts": contact_posts[:10],  # Limit contact posts
-            "available_images": unique_images[:20],  # Images are pre-validated by universal merger
+            "available_images": top_5_images,  # Top 5 images with most likes, pre-validated by universal merger
             "workshop_keywords_found": len(workshop_posts),
             "content_summary": {
                 "total_hebrew_content": len(hebrew_posts),
@@ -168,7 +177,8 @@ class WorkshopLandingPageGeneratorDataOrganizer(BaseDataOrganizer):
                 "workshop_percentage": (len(workshop_posts) / len(hebrew_posts) * 100) if hebrew_posts else 0,
                 "posts_analyzed": len(limited_workshop_posts),
                 "posts_truncated": len(workshop_posts) - len(limited_workshop_posts),
-                "total_images_available": len(unique_images)
+                "total_images_available": len(unique_images),
+                "top_5_images_selected": len(top_5_images)
             }
         }
         
@@ -203,10 +213,10 @@ The data includes posts with the following structure:
 - `replies_data`: Array of comment/reply texts (limited to 5 replies, 200 chars each)
 - `images`: Array of image URLs (available for landing pages)
 - `videos`: Array of video URLs (limited to 2)
-- `available_images`: Array of all unique images from workshop posts
+- `available_images`: Array of top 5 images with most likes from workshop posts
 
 **TASK:**
-Generate individual HTML landing pages for each workshop/class found in the data.
+Generate a single comprehensive HTML landing page that showcases all workshops/classes found in the data.
 
 **REQUIREMENTS:**
 1. **Identify Workshops**: Find all distinct workshops, classes, courses, and educational offerings
@@ -217,57 +227,64 @@ Generate individual HTML landing pages for each workshop/class found in the data
    - Dates and schedules
    - Registration/booking details
    - Contact information
-3. **Generate HTML**: Create a complete HTML landing page for each workshop
-4. **Use Images**: Incorporate relevant images from the `available_images` array (all images have been pre-validated by the universal merger)
-5. **Modern Design**: Create professional, responsive landing pages
+3. **Generate HTML**: Create ONE complete HTML landing page that includes ALL workshops in sections
+4. **Use Images**: Incorporate the top 5 images with most likes from the `available_images` array (all images have been pre-validated by the universal merger)
+5. **Modern Design**: Create a professional, responsive single-page website
 
 **HTML STRUCTURE REQUIREMENTS:**
-Each landing page should include:
+The single landing page should include:
 - Modern, responsive HTML5 structure
 - CSS styling (embedded or inline)
 - Hebrew RTL support
 - Professional color scheme
 - Mobile-friendly design
-- Call-to-action buttons
-- Image galleries
+- Navigation menu for different workshop sections
+- Hero section with main workshop highlights
+- Individual sections for each workshop
+- Call-to-action buttons for each workshop
+- Image galleries using the top 5 images
 - Contact forms or information
-- Pricing sections
+- Pricing sections for each workshop
 - Registration/booking sections
+- Footer with contact details
 
 **OUTPUT FORMAT:**
-Provide a comprehensive analysis with HTML landing pages in the following structure:
+Provide a comprehensive analysis with a single HTML landing page in the following structure:
 
-## WORKSHOP LANDING PAGES ANALYSIS
+## WORKSHOP LANDING PAGE ANALYSIS
 
 ### WORKSHOPS IDENTIFIED:
 [List all workshops found with brief descriptions]
 
-### LANDING PAGE 1: [Workshop Name]
+### COMPLETE SINGLE LANDING PAGE:
 ```html
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>[Workshop Name]</title>
+    <title>סדנאות וקורסים - [Brand Name]</title>
     <style>
-        /* Modern CSS styling */
+        /* Modern CSS styling for single page */
     </style>
 </head>
 <body>
-    <!-- Complete landing page HTML -->
+    <!-- Navigation -->
+    <!-- Hero Section -->
+    <!-- Workshop Section 1 -->
+    <!-- Workshop Section 2 -->
+    <!-- Workshop Section 3 -->
+    <!-- Contact Section -->
+    <!-- Footer -->
 </body>
 </html>
 ```
 
-### LANDING PAGE 2: [Workshop Name]
-[Continue for each workshop found...]
-
 ### IMAGE GALLERY:
-[List all images used in the landing pages with their URLs]
+[List all images used in the landing page with their URLs and likes count]
 
 ### DESIGN NOTES:
-[Explain design choices, color schemes, and layout decisions]
+[Explain design choices, color schemes, and layout decisions for the single page]
 
 **DESIGN GUIDELINES:**
 - Use modern, clean design principles
@@ -285,19 +302,22 @@ Provide a comprehensive analysis with HTML landing pages in the following struct
         instructions = """
 1. Analyze Hebrew posts to identify distinct workshops and classes
 2. Extract comprehensive details for each workshop (name, description, pricing, dates, contact)
-3. Generate complete HTML landing pages for each workshop
-4. Use images from the available_images array in the landing pages (all images are pre-validated by universal merger)
-5. Create modern, responsive HTML5 pages with embedded CSS
+3. Generate ONE complete HTML landing page that includes ALL workshops in organized sections
+4. Use the top 5 images with most likes from the available_images array throughout the page (all images are pre-validated by universal merger)
+5. Create modern, responsive HTML5 single-page website with embedded CSS
 6. Ensure Hebrew RTL support and proper text display
 7. Include professional design elements and color schemes
-8. Add call-to-action buttons for registration/booking
-9. Incorporate social proof and engagement metrics
-10. Make pages mobile-friendly and accessible
-11. Use high-quality images to showcase workshops (broken URLs have been filtered out)
-12. Include contact information and registration details
-13. Create engaging, conversion-focused landing pages
-14. If no valid images are available, use placeholder images with appropriate styling
-15. All images in available_images array have been tested for accessibility and will work properly
+8. Add navigation menu to jump between workshop sections
+9. Create hero section highlighting the main workshops
+10. Add individual sections for each workshop with call-to-action buttons
+11. Incorporate social proof and engagement metrics
+12. Make the single page mobile-friendly and accessible
+13. Use high-quality images to showcase workshops (broken URLs have been filtered out)
+14. Include contact information and registration details in dedicated sections
+15. Create engaging, conversion-focused single-page website
+16. If no valid images are available, use placeholder images with appropriate styling
+17. All images in available_images array have been tested for accessibility and will work properly
+18. Structure the page with clear sections: Navigation, Hero, Workshops, Contact, Footer
 """
         
         return prompt, instructions
