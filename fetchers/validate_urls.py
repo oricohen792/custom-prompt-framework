@@ -179,14 +179,22 @@ class URLValidator:
         if verbose:
             print(f"      - Testing ALL {len(image_urls)} images...")
         
-        for i, img_url in enumerate(image_urls):
-            print(f"        🔍 Testing image {i+1}/{len(image_urls)}: {img_url[:80]}...")
+        for i, img_data in enumerate(image_urls):
+            # Handle both old format (string) and new format (dict)
+            if isinstance(img_data, str):
+                img_url = img_data
+                img_likes = 0
+            else:
+                img_url = img_data.get('url', '')
+                img_likes = img_data.get('likes_count', 0)
+            
+            print(f"        🔍 Testing image {i+1}/{len(image_urls)} (likes: {img_likes}): {img_url[:80]}...")
             is_valid = self.validate_image_url(img_url, verbose)
             if is_valid:
-                valid_images.append(img_url)
+                valid_images.append(img_data)  # Keep original structure
                 print(f"        ✅ Valid image {i+1}")
             else:
-                invalid_images.append(img_url)
+                invalid_images.append(img_data)  # Keep original structure
                 print(f"        ❌ Invalid image {i+1}")
             
             if verbose and (i + 1) % 10 == 0:  # Progress indicator every 10 URLs
@@ -202,14 +210,22 @@ class URLValidator:
         if verbose:
             print(f"      - Testing ALL {len(video_urls)} videos...")
         
-        for i, vid_url in enumerate(video_urls):
-            print(f"        🎥 Testing video {i+1}/{len(video_urls)}: {vid_url[:80]}...")
+        for i, vid_data in enumerate(video_urls):
+            # Handle both old format (string) and new format (dict)
+            if isinstance(vid_data, str):
+                vid_url = vid_data
+                vid_likes = 0
+            else:
+                vid_url = vid_data.get('url', '')
+                vid_likes = vid_data.get('likes_count', 0)
+            
+            print(f"        🎥 Testing video {i+1}/{len(video_urls)} (likes: {vid_likes}): {vid_url[:80]}...")
             is_valid = self.validate_video_url(vid_url, verbose)
             if is_valid:
-                valid_videos.append(vid_url)
+                valid_videos.append(vid_data)  # Keep original structure
                 print(f"        ✅ Valid video {i+1}")
             else:
-                invalid_videos.append(vid_url)
+                invalid_videos.append(vid_data)  # Keep original structure
                 print(f"        ❌ Invalid video {i+1}")
             
             if verbose and (i + 1) % 5 == 0:  # Progress indicator every 5 URLs
@@ -246,14 +262,22 @@ class URLValidator:
             valid_images = []
             invalid_images = current_bad_images.copy()  # Keep existing bad images
             
-            for img_url in current_images:
+            for img_data in current_images:
                 total_images += 1
-                print(f"        🔍 Testing image {total_images}: {img_url[:80]}...")
+                # Handle both old format (string) and new format (dict)
+                if isinstance(img_data, str):
+                    img_url = img_data
+                    img_likes = 0
+                else:
+                    img_url = img_data.get('url', '')
+                    img_likes = img_data.get('likes_count', 0)
+                
+                print(f"        🔍 Testing image {total_images} (likes: {img_likes}): {img_url[:80]}...")
                 if self.validate_image_url(img_url, verbose):
-                    valid_images.append(img_url)
+                    valid_images.append(img_data)  # Keep original structure
                     print(f"        ✅ Valid image {total_images}")
                 else:
-                    invalid_images.append(img_url)
+                    invalid_images.append(img_data)  # Keep original structure
                     print(f"        ❌ Invalid image {total_images}")
                     if verbose:
                         print(f"        ⚠️ Image became invalid: {img_url[:80]}...")
@@ -268,14 +292,22 @@ class URLValidator:
             valid_videos = []
             invalid_videos = current_bad_videos.copy()  # Keep existing bad videos
             
-            for vid_url in current_videos:
+            for vid_data in current_videos:
                 total_videos += 1
-                print(f"        🎥 Testing video {total_videos}: {vid_url[:80]}...")
+                # Handle both old format (string) and new format (dict)
+                if isinstance(vid_data, str):
+                    vid_url = vid_data
+                    vid_likes = 0
+                else:
+                    vid_url = vid_data.get('url', '')
+                    vid_likes = vid_data.get('likes_count', 0)
+                
+                print(f"        🎥 Testing video {total_videos} (likes: {vid_likes}): {vid_url[:80]}...")
                 if self.validate_video_url(vid_url, verbose):
-                    valid_videos.append(vid_url)
+                    valid_videos.append(vid_data)  # Keep original structure
                     print(f"        ✅ Valid video {total_videos}")
                 else:
-                    invalid_videos.append(vid_url)
+                    invalid_videos.append(vid_data)  # Keep original structure
                     print(f"        ❌ Invalid video {total_videos}")
                     if verbose:
                         print(f"        ⚠️ Video became invalid: {vid_url[:80]}...")

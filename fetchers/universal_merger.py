@@ -28,133 +28,271 @@ def extract_hashtags(text: str) -> List[str]:
     # Remove duplicates and return as list
     return list(set(hashtags))
 
-def extract_images_from_post(post: Dict[str, Any], platform: str) -> List[str]:
-    """Extract all image URLs from a post, including main images, carousel images, and profile pictures"""
+def extract_images_from_post(post: Dict[str, Any], platform: str) -> List[Dict[str, Any]]:
+    """Extract all image data with URLs and likes count from a post"""
     images = []
     
     if platform == 'instagram':
-        # Main post images
+        # Main post images - use post likes count
         if 'displayUrl' in post and post['displayUrl']:
-            images.append(post['displayUrl'])
+            images.append({
+                "url": post['displayUrl'],
+                "likes_count": post.get('likesCount', 0)
+            })
         
-        # Carousel images
+        # Carousel images from main images array
         if 'images' in post and isinstance(post['images'], list):
-            images.extend(post['images'])
+            for img_url in post['images']:
+                images.append({
+                    "url": img_url,
+                    "likes_count": post.get('likesCount', 0)  # Use post likes for carousel
+                })
         
-        # Child posts (carousel sub-posts)
+        # Child posts (carousel sub-posts) - each has its own likes
         if 'childPosts' in post and isinstance(post['childPosts'], list):
             for child_post in post['childPosts']:
                 if 'displayUrl' in child_post and child_post['displayUrl']:
-                    images.append(child_post['displayUrl'])
+                    images.append({
+                        "url": child_post['displayUrl'],
+                        "likes_count": child_post.get('likesCount', 0)
+                    })
                 if 'images' in child_post and isinstance(child_post['images'], list):
-                    images.extend(child_post['images'])
+                    for img_url in child_post['images']:
+                        images.append({
+                            "url": img_url,
+                            "likes_count": child_post.get('likesCount', 0)
+                        })
         
-        # Profile pictures from comments and replies
+        # Profile pictures from comments and replies (no likes for profile pics)
         if 'latestComments' in post and isinstance(post['latestComments'], list):
             for comment in post['latestComments']:
                 if 'ownerProfilePicUrl' in comment and comment['ownerProfilePicUrl']:
-                    images.append(comment['ownerProfilePicUrl'])
+                    images.append({
+                        "url": comment['ownerProfilePicUrl'],
+                        "likes_count": 0
+                    })
                 if 'owner' in comment and 'profile_pic_url' in comment['owner'] and comment['owner']['profile_pic_url']:
-                    images.append(comment['owner']['profile_pic_url'])
+                    images.append({
+                        "url": comment['owner']['profile_pic_url'],
+                        "likes_count": 0
+                    })
                 
                 # Replies to comments
                 if 'replies' in comment and isinstance(comment['replies'], list):
                     for reply in comment['replies']:
                         if 'ownerProfilePicUrl' in reply and reply['ownerProfilePicUrl']:
-                            images.append(reply['ownerProfilePicUrl'])
+                            images.append({
+                                "url": reply['ownerProfilePicUrl'],
+                                "likes_count": 0
+                            })
                         if 'owner' in reply and 'profile_pic_url' in reply['owner'] and reply['owner']['profile_pic_url']:
-                            images.append(reply['owner']['profile_pic_url'])
+                            images.append({
+                                "url": reply['owner']['profile_pic_url'],
+                                "likes_count": 0
+                            })
     
     elif platform == 'facebook':
-        # Facebook image fields
+        # Facebook image fields - use post likes
+        post_likes = post.get('likes', 0)
         if 'imageUrl' in post and post['imageUrl']:
-            images.append(post['imageUrl'])
+            images.append({
+                "url": post['imageUrl'],
+                "likes_count": post_likes
+            })
         if 'fullPicture' in post and post['fullPicture']:
-            images.append(post['fullPicture'])
+            images.append({
+                "url": post['fullPicture'],
+                "likes_count": post_likes
+            })
         if 'picture' in post and post['picture']:
-            images.append(post['picture'])
+            images.append({
+                "url": post['picture'],
+                "likes_count": post_likes
+            })
         
-        # Profile pictures from comments
+        # Facebook media array structure
+        if 'media' in post and isinstance(post['media'], list):
+            for media_item in post['media']:
+                # Photo images
+                if 'photo_image' in media_item and 'uri' in media_item['photo_image']:
+                    images.append({
+                        "url": media_item['photo_image']['uri'],
+                        "likes_count": post_likes
+                    })
+                # Thumbnail images
+                if 'thumbnail' in media_item and media_item['thumbnail']:
+                    images.append({
+                        "url": media_item['thumbnail'],
+                        "likes_count": post_likes
+                    })
+                # Video thumbnails
+                if 'video' in media_item and 'thumbnail' in media_item['video']:
+                    images.append({
+                        "url": media_item['video']['thumbnail'],
+                        "likes_count": post_likes
+                    })
+        
+        # Profile pictures from comments (no likes for profile pics)
         if 'comments' in post and isinstance(post['comments'], list):
             for comment in post['comments']:
                 if 'from' in comment and 'picture' in comment['from'] and comment['from']['picture']:
-                    images.append(comment['from']['picture'])
+                    images.append({
+                        "url": comment['from']['picture'],
+                        "likes_count": 0
+                    })
                 if 'from' in comment and 'picture' in comment['from'] and 'data' in comment['from']['picture'] and 'url' in comment['from']['picture']['data']:
-                    images.append(comment['from']['picture']['data']['url'])
+                    images.append({
+                        "url": comment['from']['picture']['data']['url'],
+                        "likes_count": 0
+                    })
                 
                 # Replies to comments
                 if 'comments' in comment and isinstance(comment['comments'], list):
                     for reply in comment['comments']:
                         if 'from' in reply and 'picture' in reply['from'] and reply['from']['picture']:
-                            images.append(reply['from']['picture'])
+                            images.append({
+                                "url": reply['from']['picture'],
+                                "likes_count": 0
+                            })
                         if 'from' in reply and 'picture' in reply['from'] and 'data' in reply['from']['picture'] and 'url' in reply['from']['picture']['data']:
-                            images.append(reply['from']['picture']['data']['url'])
+                            images.append({
+                                "url": reply['from']['picture']['data']['url'],
+                                "likes_count": 0
+                            })
     
     elif platform == 'tiktok':
-        # TikTok video thumbnails and covers
+        # TikTok video thumbnails and covers - use video likes
+        video_likes = post.get('diggCount', 0)
         if 'video' in post and 'cover' in post['video']:
-            images.append(post['video']['cover'])
+            images.append({
+                "url": post['video']['cover'],
+                "likes_count": video_likes
+            })
         if 'video' in post and 'originCover' in post['video']:
-            images.append(post['video']['originCover'])
+            images.append({
+                "url": post['video']['originCover'],
+                "likes_count": video_likes
+            })
         if 'video' in post and 'dynamicCover' in post['video']:
-            images.append(post['video']['dynamicCover'])
+            images.append({
+                "url": post['video']['dynamicCover'],
+                "likes_count": video_likes
+            })
         
-        # Author profile picture
+        # Author profile picture (no likes for profile pics)
         if 'author' in post and 'avatarMedium' in post['author']:
-            images.append(post['author']['avatarMedium'])
+            images.append({
+                "url": post['author']['avatarMedium'],
+                "likes_count": 0
+            })
         if 'author' in post and 'avatarLarger' in post['author']:
-            images.append(post['author']['avatarLarger'])
+            images.append({
+                "url": post['author']['avatarLarger'],
+                "likes_count": 0
+            })
         if 'author' in post and 'avatarThumb' in post['author']:
-            images.append(post['author']['avatarThumb'])
+            images.append({
+                "url": post['author']['avatarThumb'],
+                "likes_count": 0
+            })
         
-        # Comment profile pictures
+        # Comment profile pictures (no likes for profile pics)
         if 'comments' in post and isinstance(post['comments'], list):
             for comment in post['comments']:
                 if 'user' in comment and 'avatarMedium' in comment['user']:
-                    images.append(comment['user']['avatarMedium'])
+                    images.append({
+                        "url": comment['user']['avatarMedium'],
+                        "likes_count": 0
+                    })
                 if 'user' in comment and 'avatarLarger' in comment['user']:
-                    images.append(comment['user']['avatarLarger'])
+                    images.append({
+                        "url": comment['user']['avatarLarger'],
+                        "likes_count": 0
+                    })
                 if 'user' in comment and 'avatarThumb' in comment['user']:
-                    images.append(comment['user']['avatarThumb'])
+                    images.append({
+                        "url": comment['user']['avatarThumb'],
+                        "likes_count": 0
+                    })
                 
                 # Replies to comments
                 if 'reply_comment' in comment and isinstance(comment['reply_comment'], list):
                     for reply in comment['reply_comment']:
                         if 'user' in reply and 'avatarMedium' in reply['user']:
-                            images.append(reply['user']['avatarMedium'])
+                            images.append({
+                                "url": reply['user']['avatarMedium'],
+                                "likes_count": 0
+                            })
                         if 'user' in reply and 'avatarLarger' in reply['user']:
-                            images.append(reply['user']['avatarLarger'])
+                            images.append({
+                                "url": reply['user']['avatarLarger'],
+                                "likes_count": 0
+                            })
                         if 'user' in reply and 'avatarThumb' in reply['user']:
-                            images.append(reply['user']['avatarThumb'])
+                            images.append({
+                                "url": reply['user']['avatarThumb'],
+                                "likes_count": 0
+                            })
     
-    # Remove duplicates and empty strings
-    images = list(set([img for img in images if img and img.strip()]))
+    # Remove duplicates based on URL
+    seen_urls = set()
+    unique_images = []
+    for img in images:
+        if img['url'] and img['url'].strip() and img['url'] not in seen_urls:
+            seen_urls.add(img['url'])
+            unique_images.append(img)
     
-    # Return all images without validation (validation will be done later)
-    return images
+    return unique_images
 
-def extract_videos_from_post(post: Dict[str, Any], platform: str, video_url: str = "") -> List[str]:
-    """Extract all video URLs from a post, including main videos, carousel videos, and embedded videos"""
+def extract_videos_from_post(post: Dict[str, Any], platform: str, video_url: str = "") -> List[Dict[str, Any]]:
+    """Extract all video data with URLs and likes count from a post"""
     videos = []
     
     # Add the main video_url if provided
     if video_url and video_url.strip():
-        videos.append(video_url)
+        # Get the correct likes count based on platform
+        if platform == 'tiktok':
+            likes_count = post.get('diggCount', 0)
+        elif platform == 'instagram':
+            likes_count = post.get('likesCount', 0)
+        elif platform == 'facebook':
+            likes_count = post.get('likes', 0)
+        else:
+            likes_count = post.get('likesCount', post.get('likes', 0))
+        
+        videos.append({
+            "url": video_url,
+            "likes_count": likes_count
+        })
     
     if platform == 'instagram':
-        # Main post video
+        # Main post video - use post likes
+        post_likes = post.get('likesCount', 0)
         if 'videoUrl' in post and post['videoUrl']:
-            videos.append(post['videoUrl'])
+            videos.append({
+                "url": post['videoUrl'],
+                "likes_count": post_likes
+            })
         if 'video_url' in post and post['video_url']:
-            videos.append(post['video_url'])
+            videos.append({
+                "url": post['video_url'],
+                "likes_count": post_likes
+            })
         
-        # Child posts (carousel sub-posts) videos
+        # Child posts (carousel sub-posts) videos - each has its own likes
         if 'childPosts' in post and isinstance(post['childPosts'], list):
             for child_post in post['childPosts']:
+                child_likes = child_post.get('likesCount', 0)
                 if 'videoUrl' in child_post and child_post['videoUrl']:
-                    videos.append(child_post['videoUrl'])
+                    videos.append({
+                        "url": child_post['videoUrl'],
+                        "likes_count": child_likes
+                    })
                 if 'video_url' in child_post and child_post['video_url']:
-                    videos.append(child_post['video_url'])
+                    videos.append({
+                        "url": child_post['video_url'],
+                        "likes_count": child_likes
+                    })
         
         # Check if post type is video
         if post.get('type') == 'Video' and 'displayUrl' in post:
@@ -163,68 +301,126 @@ def extract_videos_from_post(post: Dict[str, Any], platform: str, video_url: str
             pass
     
     elif platform == 'facebook':
-        # Facebook video fields
+        # Facebook video fields - use post likes
+        post_likes = post.get('likes', 0)
         if 'videoUrl' in post and post['videoUrl']:
-            videos.append(post['videoUrl'])
+            videos.append({
+                "url": post['videoUrl'],
+                "likes_count": post_likes
+            })
         if 'source' in post and post['source']:
-            videos.append(post['source'])
+            videos.append({
+                "url": post['source'],
+                "likes_count": post_likes
+            })
         if 'link' in post and post['link'] and ('video' in post['link'].lower() or 'youtube' in post['link'].lower() or 'vimeo' in post['link'].lower()):
-            videos.append(post['link'])
+            videos.append({
+                "url": post['link'],
+                "likes_count": post_likes
+            })
         
         # Check for embedded videos in attachments
         if 'attachments' in post and isinstance(post['attachments'], list):
             for attachment in post['attachments']:
                 if 'media' in attachment and 'video' in attachment['media']:
                     if 'source' in attachment['media']['video']:
-                        videos.append(attachment['media']['video']['source'])
+                        videos.append({
+                            "url": attachment['media']['video']['source'],
+                            "likes_count": post_likes
+                        })
                 if 'subattachments' in attachment and isinstance(attachment['subattachments'], list):
                     for subattachment in attachment['subattachments']:
                         if 'media' in subattachment and 'video' in subattachment['media']:
                             if 'source' in subattachment['media']['video']:
-                                videos.append(subattachment['media']['video']['source'])
+                                videos.append({
+                                    "url": subattachment['media']['video']['source'],
+                                    "likes_count": post_likes
+                                })
     
     elif platform == 'tiktok':
-        # TikTok video URLs
+        # TikTok video URLs - use video likes
+        video_likes = post.get('diggCount', 0)
         if 'video' in post and 'downloadAddr' in post['video']:
-            videos.append(post['video']['downloadAddr'])
+            videos.append({
+                "url": post['video']['downloadAddr'],
+                "likes_count": video_likes
+            })
         if 'video' in post and 'playAddr' in post['video']:
-            videos.append(post['video']['playAddr'])
+            videos.append({
+                "url": post['video']['playAddr'],
+                "likes_count": video_likes
+            })
         if 'video' in post and 'playApi' in post['video']:
-            videos.append(post['video']['playApi'])
+            videos.append({
+                "url": post['video']['playApi'],
+                "likes_count": video_likes
+            })
         if 'webVideoUrl' in post and post['webVideoUrl']:
-            videos.append(post['webVideoUrl'])
+            videos.append({
+                "url": post['webVideoUrl'],
+                "likes_count": video_likes
+            })
         if 'videoUrl' in post and post['videoUrl']:
-            videos.append(post['videoUrl'])
+            videos.append({
+                "url": post['videoUrl'],
+                "likes_count": video_likes
+            })
         
         # TikTok share URL (web version)
         if 'shareUrl' in post and post['shareUrl']:
-            videos.append(post['shareUrl'])
+            videos.append({
+                "url": post['shareUrl'],
+                "likes_count": video_likes
+            })
     
-    # Remove duplicates and empty strings
-    videos = list(set([video for video in videos if video and video.strip()]))
+    # Remove duplicates based on URL
+    seen_urls = set()
+    unique_videos = []
+    for video in videos:
+        if video['url'] and video['url'].strip() and video['url'] not in seen_urls:
+            seen_urls.add(video['url'])
+            unique_videos.append(video)
     
-    # Return all videos without validation (validation will be done later)
-    return videos
+    return unique_videos
 
-def extract_reply_data(post: Dict[str, Any], platform: str) -> List[str]:
-    """Extract all reply text content from a post based on platform"""
-    all_reply_texts = []
+def extract_reply_data(post: Dict[str, Any], platform: str) -> List[Dict[str, Any]]:
+    """Extract all reply data with text and likes count from a post based on platform"""
+    all_replies = []
     
     if platform == 'instagram':
         # Instagram has latestComments with nested replies
         latest_comments = post.get('latestComments', [])
         for comment in latest_comments:
-            # Add the main comment text
+            # Add the main comment text with likes
             comment_text = comment.get('text', '')
+            comment_likes = comment.get('likesCount', 0)
             if comment_text:
-                all_reply_texts.append(comment_text)
+                all_replies.append({
+                    "comment": comment_text,
+                    "likes_count": comment_likes
+                })
             
             # Add replies to this comment
             replies = comment.get('replies', [])
             for reply in replies:
                 reply_text = reply.get('text', '')
+                reply_likes = reply.get('likesCount', 0)
                 if reply_text:
-                    all_reply_texts.append(reply_text)
+                    all_replies.append({
+                        "comment": reply_text,
+                        "likes_count": reply_likes
+                    })
+        
+        # Remove duplicate comments based on text content
+        seen_comments = set()
+        unique_replies = []
+        for reply in all_replies:
+            comment_text = reply['comment']
+            if comment_text not in seen_comments:
+                seen_comments.add(comment_text)
+                unique_replies.append(reply)
+        
+        all_replies = unique_replies
     
     elif platform == 'facebook':
         # Facebook structure - check for comments array
@@ -232,21 +428,32 @@ def extract_reply_data(post: Dict[str, Any], platform: str) -> List[str]:
         if isinstance(comments, list):
             for comment in comments:
                 comment_text = comment.get('text', comment.get('message', ''))
+                comment_likes = comment.get('likes', 0)
                 if comment_text:
-                    all_reply_texts.append(comment_text)
+                    all_replies.append({
+                        "comment": comment_text,
+                        "likes_count": comment_likes
+                    })
                 
                 # Check for replies to this comment
                 comment_replies = comment.get('replies', comment.get('comments', []))
                 if isinstance(comment_replies, list):
                     for reply in comment_replies:
                         reply_text = reply.get('text', reply.get('message', ''))
+                        reply_likes = reply.get('likes', 0)
                         if reply_text:
-                            all_reply_texts.append(reply_text)
+                            all_replies.append({
+                                "comment": reply_text,
+                                "likes_count": reply_likes
+                            })
         else:
             # If comments is just a count, add placeholder
             comment_count = post.get('comments', 0)
             if comment_count > 0:
-                all_reply_texts.append(f'[{comment_count} comments available but not extracted]')
+                all_replies.append({
+                    "comment": f'[{comment_count} comments available but not extracted]',
+                    "likes_count": 0
+                })
     
     elif platform == 'tiktok':
         # TikTok structure - check for comments
@@ -254,23 +461,34 @@ def extract_reply_data(post: Dict[str, Any], platform: str) -> List[str]:
         if isinstance(comments, list):
             for comment in comments:
                 comment_text = comment.get('text', '')
+                comment_likes = comment.get('likesCount', 0)
                 if comment_text:
-                    all_reply_texts.append(comment_text)
+                    all_replies.append({
+                        "comment": comment_text,
+                        "likes_count": comment_likes
+                    })
                 
                 # Check for replies to this comment
                 comment_replies = comment.get('reply_comment', [])
                 if isinstance(comment_replies, list):
                     for reply in comment_replies:
                         reply_text = reply.get('text', '')
+                        reply_likes = reply.get('likesCount', 0)
                         if reply_text:
-                            all_reply_texts.append(reply_text)
+                            all_replies.append({
+                                "comment": reply_text,
+                                "likes_count": reply_likes
+                            })
         else:
             # If comments is just a count, add placeholder
             comment_count = post.get('commentCount', 0)
             if comment_count > 0:
-                all_reply_texts.append(f'[{comment_count} comments available but not extracted]')
+                all_replies.append({
+                    "comment": f'[{comment_count} comments available but not extracted]',
+                    "likes_count": 0
+                })
     
-    return all_reply_texts
+    return all_replies
 
 def load_json_file(filepath: str) -> Dict[str, Any]:
     """Load JSON file and return its content"""
@@ -361,8 +579,14 @@ def convert_instagram_post(post: Dict[str, Any]) -> Dict[str, Any]:
     timestamp = post.get("timestamp", "")
     if timestamp:
         try:
-            dt = datetime.fromtimestamp(int(timestamp))
-            post_time = dt.strftime("%Y-%m-%d %H:%M:%S+00")
+            # Handle ISO format timestamps (e.g., "2025-08-31T13:50:16.000Z")
+            if 'T' in timestamp:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                post_time = dt.strftime("%Y-%m-%d %H:%M:%S+00")
+            else:
+                # Handle Unix timestamp format
+                dt = datetime.fromtimestamp(int(timestamp))
+                post_time = dt.strftime("%Y-%m-%d %H:%M:%S+00")
         except:
             post_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S+00")
     else:
