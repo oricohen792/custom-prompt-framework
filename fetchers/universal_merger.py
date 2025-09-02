@@ -1,15 +1,276 @@
 #!/usr/bin/env python3
 """
 Universal Social Media Merger Script
-Takes any 3 social media JSON files (Facebook, Instagram, TikTok) and builds a person JSON file
-with the exact structure of person1.json
+Takes social media JSON files (Facebook, Instagram, TikTok) and merges them into a unified format.
+This script focuses on merging data without URL validation - use url_validator.py separately for validation.
 """
 
 import os
 import json
 import argparse
+import re
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+
+
+
+
+
+def extract_hashtags(text: str) -> List[str]:
+    """Extract hashtags from text content"""
+    if not text:
+        return []
+    
+    # Find all hashtags using regex
+    hashtag_pattern = r'#\w+'
+    hashtags = re.findall(hashtag_pattern, text)
+    
+    # Remove duplicates and return as list
+    return list(set(hashtags))
+
+def extract_images_from_post(post: Dict[str, Any], platform: str) -> List[str]:
+    """Extract all image URLs from a post, including main images, carousel images, and profile pictures"""
+    images = []
+    
+    if platform == 'instagram':
+        # Main post images
+        if 'displayUrl' in post and post['displayUrl']:
+            images.append(post['displayUrl'])
+        
+        # Carousel images
+        if 'images' in post and isinstance(post['images'], list):
+            images.extend(post['images'])
+        
+        # Child posts (carousel sub-posts)
+        if 'childPosts' in post and isinstance(post['childPosts'], list):
+            for child_post in post['childPosts']:
+                if 'displayUrl' in child_post and child_post['displayUrl']:
+                    images.append(child_post['displayUrl'])
+                if 'images' in child_post and isinstance(child_post['images'], list):
+                    images.extend(child_post['images'])
+        
+        # Profile pictures from comments and replies
+        if 'latestComments' in post and isinstance(post['latestComments'], list):
+            for comment in post['latestComments']:
+                if 'ownerProfilePicUrl' in comment and comment['ownerProfilePicUrl']:
+                    images.append(comment['ownerProfilePicUrl'])
+                if 'owner' in comment and 'profile_pic_url' in comment['owner'] and comment['owner']['profile_pic_url']:
+                    images.append(comment['owner']['profile_pic_url'])
+                
+                # Replies to comments
+                if 'replies' in comment and isinstance(comment['replies'], list):
+                    for reply in comment['replies']:
+                        if 'ownerProfilePicUrl' in reply and reply['ownerProfilePicUrl']:
+                            images.append(reply['ownerProfilePicUrl'])
+                        if 'owner' in reply and 'profile_pic_url' in reply['owner'] and reply['owner']['profile_pic_url']:
+                            images.append(reply['owner']['profile_pic_url'])
+    
+    elif platform == 'facebook':
+        # Facebook image fields
+        if 'imageUrl' in post and post['imageUrl']:
+            images.append(post['imageUrl'])
+        if 'fullPicture' in post and post['fullPicture']:
+            images.append(post['fullPicture'])
+        if 'picture' in post and post['picture']:
+            images.append(post['picture'])
+        
+        # Profile pictures from comments
+        if 'comments' in post and isinstance(post['comments'], list):
+            for comment in post['comments']:
+                if 'from' in comment and 'picture' in comment['from'] and comment['from']['picture']:
+                    images.append(comment['from']['picture'])
+                if 'from' in comment and 'picture' in comment['from'] and 'data' in comment['from']['picture'] and 'url' in comment['from']['picture']['data']:
+                    images.append(comment['from']['picture']['data']['url'])
+                
+                # Replies to comments
+                if 'comments' in comment and isinstance(comment['comments'], list):
+                    for reply in comment['comments']:
+                        if 'from' in reply and 'picture' in reply['from'] and reply['from']['picture']:
+                            images.append(reply['from']['picture'])
+                        if 'from' in reply and 'picture' in reply['from'] and 'data' in reply['from']['picture'] and 'url' in reply['from']['picture']['data']:
+                            images.append(reply['from']['picture']['data']['url'])
+    
+    elif platform == 'tiktok':
+        # TikTok video thumbnails and covers
+        if 'video' in post and 'cover' in post['video']:
+            images.append(post['video']['cover'])
+        if 'video' in post and 'originCover' in post['video']:
+            images.append(post['video']['originCover'])
+        if 'video' in post and 'dynamicCover' in post['video']:
+            images.append(post['video']['dynamicCover'])
+        
+        # Author profile picture
+        if 'author' in post and 'avatarMedium' in post['author']:
+            images.append(post['author']['avatarMedium'])
+        if 'author' in post and 'avatarLarger' in post['author']:
+            images.append(post['author']['avatarLarger'])
+        if 'author' in post and 'avatarThumb' in post['author']:
+            images.append(post['author']['avatarThumb'])
+        
+        # Comment profile pictures
+        if 'comments' in post and isinstance(post['comments'], list):
+            for comment in post['comments']:
+                if 'user' in comment and 'avatarMedium' in comment['user']:
+                    images.append(comment['user']['avatarMedium'])
+                if 'user' in comment and 'avatarLarger' in comment['user']:
+                    images.append(comment['user']['avatarLarger'])
+                if 'user' in comment and 'avatarThumb' in comment['user']:
+                    images.append(comment['user']['avatarThumb'])
+                
+                # Replies to comments
+                if 'reply_comment' in comment and isinstance(comment['reply_comment'], list):
+                    for reply in comment['reply_comment']:
+                        if 'user' in reply and 'avatarMedium' in reply['user']:
+                            images.append(reply['user']['avatarMedium'])
+                        if 'user' in reply and 'avatarLarger' in reply['user']:
+                            images.append(reply['user']['avatarLarger'])
+                        if 'user' in reply and 'avatarThumb' in reply['user']:
+                            images.append(reply['user']['avatarThumb'])
+    
+    # Remove duplicates and empty strings
+    images = list(set([img for img in images if img and img.strip()]))
+    
+    # Return all images without validation (validation will be done later)
+    return images
+
+def extract_videos_from_post(post: Dict[str, Any], platform: str, video_url: str = "") -> List[str]:
+    """Extract all video URLs from a post, including main videos, carousel videos, and embedded videos"""
+    videos = []
+    
+    # Add the main video_url if provided
+    if video_url and video_url.strip():
+        videos.append(video_url)
+    
+    if platform == 'instagram':
+        # Main post video
+        if 'videoUrl' in post and post['videoUrl']:
+            videos.append(post['videoUrl'])
+        if 'video_url' in post and post['video_url']:
+            videos.append(post['video_url'])
+        
+        # Child posts (carousel sub-posts) videos
+        if 'childPosts' in post and isinstance(post['childPosts'], list):
+            for child_post in post['childPosts']:
+                if 'videoUrl' in child_post and child_post['videoUrl']:
+                    videos.append(child_post['videoUrl'])
+                if 'video_url' in child_post and child_post['video_url']:
+                    videos.append(child_post['video_url'])
+        
+        # Check if post type is video
+        if post.get('type') == 'Video' and 'displayUrl' in post:
+            # For video posts, the displayUrl might be a video thumbnail, but we'll include it
+            # The actual video URL might be in videoUrl field
+            pass
+    
+    elif platform == 'facebook':
+        # Facebook video fields
+        if 'videoUrl' in post and post['videoUrl']:
+            videos.append(post['videoUrl'])
+        if 'source' in post and post['source']:
+            videos.append(post['source'])
+        if 'link' in post and post['link'] and ('video' in post['link'].lower() or 'youtube' in post['link'].lower() or 'vimeo' in post['link'].lower()):
+            videos.append(post['link'])
+        
+        # Check for embedded videos in attachments
+        if 'attachments' in post and isinstance(post['attachments'], list):
+            for attachment in post['attachments']:
+                if 'media' in attachment and 'video' in attachment['media']:
+                    if 'source' in attachment['media']['video']:
+                        videos.append(attachment['media']['video']['source'])
+                if 'subattachments' in attachment and isinstance(attachment['subattachments'], list):
+                    for subattachment in attachment['subattachments']:
+                        if 'media' in subattachment and 'video' in subattachment['media']:
+                            if 'source' in subattachment['media']['video']:
+                                videos.append(subattachment['media']['video']['source'])
+    
+    elif platform == 'tiktok':
+        # TikTok video URLs
+        if 'video' in post and 'downloadAddr' in post['video']:
+            videos.append(post['video']['downloadAddr'])
+        if 'video' in post and 'playAddr' in post['video']:
+            videos.append(post['video']['playAddr'])
+        if 'video' in post and 'playApi' in post['video']:
+            videos.append(post['video']['playApi'])
+        if 'webVideoUrl' in post and post['webVideoUrl']:
+            videos.append(post['webVideoUrl'])
+        if 'videoUrl' in post and post['videoUrl']:
+            videos.append(post['videoUrl'])
+        
+        # TikTok share URL (web version)
+        if 'shareUrl' in post and post['shareUrl']:
+            videos.append(post['shareUrl'])
+    
+    # Remove duplicates and empty strings
+    videos = list(set([video for video in videos if video and video.strip()]))
+    
+    # Return all videos without validation (validation will be done later)
+    return videos
+
+def extract_reply_data(post: Dict[str, Any], platform: str) -> List[str]:
+    """Extract all reply text content from a post based on platform"""
+    all_reply_texts = []
+    
+    if platform == 'instagram':
+        # Instagram has latestComments with nested replies
+        latest_comments = post.get('latestComments', [])
+        for comment in latest_comments:
+            # Add the main comment text
+            comment_text = comment.get('text', '')
+            if comment_text:
+                all_reply_texts.append(comment_text)
+            
+            # Add replies to this comment
+            replies = comment.get('replies', [])
+            for reply in replies:
+                reply_text = reply.get('text', '')
+                if reply_text:
+                    all_reply_texts.append(reply_text)
+    
+    elif platform == 'facebook':
+        # Facebook structure - check for comments array
+        comments = post.get('comments', [])
+        if isinstance(comments, list):
+            for comment in comments:
+                comment_text = comment.get('text', comment.get('message', ''))
+                if comment_text:
+                    all_reply_texts.append(comment_text)
+                
+                # Check for replies to this comment
+                comment_replies = comment.get('replies', comment.get('comments', []))
+                if isinstance(comment_replies, list):
+                    for reply in comment_replies:
+                        reply_text = reply.get('text', reply.get('message', ''))
+                        if reply_text:
+                            all_reply_texts.append(reply_text)
+        else:
+            # If comments is just a count, add placeholder
+            comment_count = post.get('comments', 0)
+            if comment_count > 0:
+                all_reply_texts.append(f'[{comment_count} comments available but not extracted]')
+    
+    elif platform == 'tiktok':
+        # TikTok structure - check for comments
+        comments = post.get('comments', [])
+        if isinstance(comments, list):
+            for comment in comments:
+                comment_text = comment.get('text', '')
+                if comment_text:
+                    all_reply_texts.append(comment_text)
+                
+                # Check for replies to this comment
+                comment_replies = comment.get('reply_comment', [])
+                if isinstance(comment_replies, list):
+                    for reply in comment_replies:
+                        reply_text = reply.get('text', '')
+                        if reply_text:
+                            all_reply_texts.append(reply_text)
+        else:
+            # If comments is just a count, add placeholder
+            comment_count = post.get('commentCount', 0)
+            if comment_count > 0:
+                all_reply_texts.append(f'[{comment_count} comments available but not extracted]')
+    
+    return all_reply_texts
 
 def load_json_file(filepath: str) -> Dict[str, Any]:
     """Load JSON file and return its content"""
@@ -70,9 +331,17 @@ def convert_facebook_post(post: Dict[str, Any]) -> Dict[str, Any]:
     comments_count = post.get("comments", 0)
     shares_count = post.get("shares", 0)
     
+    # Extract content, hashtags, reply data, images, and videos
+    content = post.get("text", "")
+    hashtags = extract_hashtags(content)
+    replies_data = extract_reply_data(post, "facebook")
+    images = extract_images_from_post(post, "facebook")
+    video_url = post.get("url", "")
+    videos = extract_videos_from_post(post, "facebook", video_url)
+    
     return {
         "post_time": post_time,
-        "content": post.get("text", ""),
+        "content": content,
         "social_network": "facebook",
         "likes_count": likes_count,
         "comments_count": comments_count,
@@ -80,8 +349,10 @@ def convert_facebook_post(post: Dict[str, Any]) -> Dict[str, Any]:
         "plays": 0,  # Facebook doesn't have plays
         "shares": shares_count,
         "saves": 0,  # Facebook doesn't have saves
-        "video_url": post.get("url", ""),
-        "replies_data": []
+        "hashtags": hashtags,
+        "replies_data": replies_data,
+        "images": images,
+        "videos": videos
     }
 
 def convert_instagram_post(post: Dict[str, Any]) -> Dict[str, Any]:
@@ -103,9 +374,17 @@ def convert_instagram_post(post: Dict[str, Any]) -> Dict[str, Any]:
     video_views = post.get("videoViewCount", 0)
     video_plays = post.get("videoPlayCount", 0)
     
+    # Extract content, hashtags, reply data, images, and videos
+    content = post.get("caption", "")
+    hashtags = extract_hashtags(content)
+    replies_data = extract_reply_data(post, "instagram")
+    images = extract_images_from_post(post, "instagram")
+    video_url = post.get("url", "")
+    videos = extract_videos_from_post(post, "instagram", video_url)
+    
     return {
         "post_time": post_time,
-        "content": post.get("caption", ""),
+        "content": content,
         "social_network": "instagram",
         "likes_count": likes_count,
         "comments_count": comments_count,
@@ -113,8 +392,10 @@ def convert_instagram_post(post: Dict[str, Any]) -> Dict[str, Any]:
         "plays": video_plays,
         "shares": 0,  # Instagram doesn't have shares
         "saves": 0,  # Instagram doesn't have saves
-        "video_url": post.get("url", ""),
-        "replies_data": []
+        "hashtags": hashtags,
+        "replies_data": replies_data,
+        "images": images,
+        "videos": videos
     }
 
 def convert_tiktok_video(video: Dict[str, Any]) -> Dict[str, Any]:
@@ -137,9 +418,17 @@ def convert_tiktok_video(video: Dict[str, Any]) -> Dict[str, Any]:
     shares_count = video.get("shareCount", 0)
     saves_count = video.get("collectCount", 0)
     
+    # Extract content, hashtags, reply data, images, and videos
+    content = video.get("text", "")
+    hashtags = extract_hashtags(content)
+    replies_data = extract_reply_data(video, "tiktok")
+    images = extract_images_from_post(video, "tiktok")
+    video_url = video.get("webVideoUrl", "")
+    videos = extract_videos_from_post(video, "tiktok", video_url)
+    
     return {
         "post_time": post_time,
-        "content": video.get("text", ""),
+        "content": content,
         "social_network": "tiktok",
         "likes_count": likes_count,
         "comments_count": comments_count,
@@ -147,8 +436,10 @@ def convert_tiktok_video(video: Dict[str, Any]) -> Dict[str, Any]:
         "plays": views_count,
         "shares": shares_count,
         "saves": saves_count,
-        "video_url": video.get("webVideoUrl", ""),
-        "replies_data": []
+        "hashtags": hashtags,
+        "replies_data": replies_data,
+        "images": images,
+        "videos": videos
     }
 
 def list_available_rawdata_files(rawdata_dir: str) -> None:
@@ -255,6 +546,9 @@ def merge_username_platforms(username: str, platform_files: List[str], output_fi
             print(f"   ❌ No posts converted from any platform")
             return False
         
+        # Keep all URLs as they are - no validation during merge
+        print(f"   📊 Processing {len(all_converted_posts)} posts with all media URLs...")
+        
         # Sort by post time (newest first)
         print(f"   🔄 Sorting {len(all_converted_posts)} posts by time...")
         all_converted_posts.sort(key=lambda x: x["post_time"], reverse=True)
@@ -337,9 +631,17 @@ def extract_username_from_filename(filepath: str) -> Optional[str]:
 
 def convert_generic_post(post: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a generic post to the required format"""
+    # Extract content, hashtags, reply data, images, and videos
+    content = post.get("text", post.get("content", post.get("caption", "")))
+    hashtags = extract_hashtags(content)
+    replies_data = extract_reply_data(post, "unknown")
+    images = extract_images_from_post(post, "unknown")
+    video_url = post.get("url", post.get("video_url", ""))
+    videos = extract_videos_from_post(post, "unknown", video_url)
+    
     return {
         "post_time": post.get("time", post.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S+00"))),
-        "content": post.get("text", post.get("content", post.get("caption", ""))),
+        "content": content,
         "social_network": "unknown",
         "likes_count": post.get("likes", post.get("likes_count", 0)),
         "comments_count": post.get("comments", post.get("comments_count", 0)),
@@ -347,8 +649,10 @@ def convert_generic_post(post: Dict[str, Any]) -> Dict[str, Any]:
         "plays": post.get("plays", post.get("play_count", 0)),
         "shares": post.get("shares", post.get("share_count", 0)),
         "saves": post.get("saves", post.get("save_count", 0)),
-        "video_url": post.get("url", post.get("video_url", "")),
-        "replies_data": []
+        "hashtags": hashtags,
+        "replies_data": replies_data,
+        "images": images,
+        "videos": videos
     }
 
 def merge_social_media_files(file1: str, file2: str, file3: str, output_file: str, username: str = None) -> bool:
@@ -484,6 +788,7 @@ def main():
     parser.add_argument('-r', '--rawdata-dir', default='rawdata', help='Raw data directory to scan (default: rawdata)')
     parser.add_argument('-u', '--username', help='Specific username to process (optional, processes all if not specified)')
     parser.add_argument('-l', '--list-files', action='store_true', help='List available raw data files and exit')
+
     
     args = parser.parse_args()
     
@@ -491,6 +796,8 @@ def main():
     if args.list_files:
         list_available_rawdata_files(args.rawdata_dir)
         return 0
+    
+
     
     # Get all JSON files from rawdata folder
     rawdata_files = get_rawdata_files(args.rawdata_dir)
@@ -515,9 +822,10 @@ def main():
         else:
             print(f"❌ No files found for username: {args.username}")
             return 1
-    
-    print(f"👥 Found {len(username_files)} unique usernames to process")
-    print()
+    else:
+        print(f"👥 Found {len(username_files)} unique usernames to process")
+        print("🔄 Processing ALL usernames found in rawdata folder...")
+        print()
     
     # Process each username's files
     success_count = 0
